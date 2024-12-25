@@ -1,0 +1,152 @@
+import React, { useState } from "react";
+import Navigation from "@/components/Navigation";
+import { Button } from "@/components/ui/button";
+import { Brain, ArrowLeft } from "lucide-react";
+import MLQuiz from "@/components/quiz/MLQuiz";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import RealWorldExamples from "@/components/lessons/RealWorldExamples";
+import ComparisonTable from "@/components/lessons/ComparisonTable";
+import HeroSection from "@/components/lessons/HeroSection";
+import ExamplesSection from "@/components/lessons/ExamplesSection";
+import WhatIsMLSection from "@/components/lessons/WhatIsMLSection";
+import HowMLWorksSection from "@/components/lessons/HowMLWorksSection";
+import WhyLearnMLSection from "@/components/lessons/WhyLearnMLSection";
+import InteractiveLessonSection from "@/components/lessons/InteractiveLessonSection";
+import { AiTutor } from "@/components/lessons/interactive/AiTutor";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import ChapterSection from "@/components/lessons/ChapterSection";
+
+const Lesson = () => {
+  const [showQuiz, setShowQuiz] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const lessonState = location.state;
+
+  const { data: chaptersData, isLoading } = useQuery({
+    queryKey: ['chapters-with-lessons'],
+    queryFn: async () => {
+      const { data: chapters, error: chaptersError } = await supabase
+        .from('chapters')
+        .select(`
+          *,
+          lessons (
+            id,
+            title,
+            description,
+            duration_in_minutes,
+            xp_reward,
+            coins_reward,
+            status
+          )
+        `)
+        .order('number');
+      
+      if (chaptersError) throw chaptersError;
+      
+      return chapters.map(chapter => ({
+        id: chapter.number,
+        title: chapter.title,
+        description: chapter.description || '',
+        isLocked: false,
+        progress: chapter.number <= 4 ? 100 : chapter.number === 5 ? 60 : 0,
+        subLessons: (chapter.lessons || []).map((lesson: any) => ({
+          id: lesson.id,
+          title: lesson.title,
+          description: lesson.description,
+          duration: `${lesson.duration_in_minutes} min`,
+          xpReward: lesson.xp_reward,
+          coinReward: lesson.coins_reward,
+          isLocked: lesson.status !== 'published',
+          progress: chapter.number <= 4 ? 100 : chapter.number === 5 ? 60 : 0,
+        }))
+      }));
+    }
+  });
+
+  const handleStartLesson = (chapterId: number, lessonId: number) => {
+    navigate("/lesson", { 
+      state: { 
+        chapterId,
+        lessonId,
+        title: chaptersData?.find(c => c.id === chapterId)?.subLessons.find(l => l.id === lessonId)?.title
+      }
+    });
+  };
+
+  const getCurrentChapterId = () => {
+    return 5; // Simulating that we're on chapter 5
+  };
+
+  const handleBack = () => {
+    navigate("/lesson", { state: null });
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-24">
+      <main className="container mx-auto px-4 py-8">
+        <div className="max-w-4xl mx-auto space-y-8">
+          {lessonState && (
+            <Button
+              variant="ghost"
+              className="mb-4 -ml-2 text-gray-600 hover:text-gray-900"
+              onClick={handleBack}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Lessons
+            </Button>
+          )}
+          
+          {!lessonState ? (
+            <div className="bg-gray-50/50 backdrop-blur-sm rounded-xl p-3 sm:p-6">
+              <h1 className="text-2xl sm:text-3xl font-bold mb-2">Introduction to AI</h1>
+              <p className="text-gray-600 mb-6 sm:mb-8">Master the fundamentals of Artificial Intelligence through hands-on lessons</p>
+              
+              <div className="space-y-3">
+                {isLoading ? (
+                  <div className="text-center py-8">Loading chapters...</div>
+                ) : chaptersData?.map((chapter) => (
+                  <ChapterSection
+                    key={chapter.id}
+                    chapter={chapter}
+                    onStartLesson={handleStartLesson}
+                    isCurrentChapter={chapter.id === getCurrentChapterId()}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : !showQuiz ? (
+            <>
+              <HeroSection />
+              <InteractiveLessonSection />
+              <ExamplesSection />
+              <WhatIsMLSection />
+              <HowMLWorksSection />
+              <WhyLearnMLSection />
+              <RealWorldExamples />
+              <ComparisonTable />
+
+              <div className="flex justify-center mt-8">
+                <Button
+                  size="lg"
+                  onClick={() => setShowQuiz(true)}
+                  className="gap-2"
+                >
+                  <Brain className="w-5 h-5" />
+                  Start Quiz
+                </Button>
+              </div>
+            </>
+          ) : (
+            <MLQuiz />
+          )}
+        </div>
+      </main>
+      <AiTutor />
+      <Navigation />
+    </div>
+  );
+};
+
+export default Lesson;
